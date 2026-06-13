@@ -1,9 +1,12 @@
 import { Hono } from 'hono'
+import { cors } from 'hono/cors'
 import questions from './routes/questions'
 import responses from './routes/responses'
 import surveys from './routes/surveys'
 
 const app = new Hono<{ Bindings: Env }>()
+
+app.use('/api/*', cors())
 
 app.get('/api/health', (c) => c.json({ status: 'ok' }))
 
