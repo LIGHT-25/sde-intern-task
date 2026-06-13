@@ -1,34 +1,32 @@
 {
-	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "sde-intern-task-api",
-	"main": "src/index.ts",
-	"compatibility_date": "2026-05-22",
-	"compatibility_flags": [
-		"nodejs_compat"
-	],
-	"observability": {
-		"enabled": true
-	},
-	"d1_databases": [
-		{
-			"binding": "survey_builder_db",
-			"database_name": "survey-builder-db",
-			"database_id": "2815a7e2-1dd4-4360-b0ab-d43f5857a909"
-		}
-	]
-	// Add bindings here as you need them, then run `pnpm cf-typegen` to refresh `Env` types.
-	//
-	// Examples:
-	//
-	// "d1_databases": [
-	//   { "binding": "DB", "database_name": "survey-builder", "database_id": "<id>" }
-	// ],
-	//
-	// "kv_namespaces": [
-	//   { "binding": "SESSIONS", "id": "<id>" }
-	// ],
-	//
-	// "r2_buckets": [
-	//   { "binding": "ASSETS", "bucket_name": "survey-builder-assets" }
-	// ]
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sde-intern-task-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-05-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "survey_builder_db",
+      "database_name": "survey-builder-db",
+      "database_id": "2815a7e2-1dd4-4360-b0ab-d43f5857a909"
+    }
+  ]
+  // Add bindings here as you need them, then run `pnpm cf-typegen` to refresh `Env` types.
+  //
+  // Examples:
+  //
+  // "d1_databases": [
+  //   { "binding": "DB", "database_name": "survey-builder", "database_id": "<id>" }
+  // ],
+  //
+  // "kv_namespaces": [
+  //   { "binding": "SESSIONS", "id": "<id>" }
+  // ],
+  //
+  // "r2_buckets": [
+  //   { "binding": "ASSETS", "bucket_name": "survey-builder-assets" }
+  // ]
 }
