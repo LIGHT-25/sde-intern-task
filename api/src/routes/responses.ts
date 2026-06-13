@@ -19,9 +19,27 @@ responses.get('/:surveyId', async (c) => {
 
   return c.json(result.results)
 })
-responses.post('/:surveyId', async (c) => {
+
+responses.get('/:surveyId/all-answers', async (c) => {
   const surveyId = c.req.param('surveyId')
 
+  const result = await c.env.survey_builder_db
+    .prepare(
+      `
+			SELECT a.*
+			FROM answers a
+			JOIN responses r ON a.response_id = r.id
+			WHERE r.survey_id = ?
+			`,
+    )
+    .bind(surveyId)
+    .all()
+
+  return c.json(result.results)
+})
+
+responses.post('/:surveyId', async (c) => {
+  const surveyId = c.req.param('surveyId')
   const responseId = crypto.randomUUID()
 
   await c.env.survey_builder_db
@@ -42,45 +60,53 @@ responses.post('/:surveyId', async (c) => {
     responseId,
   })
 })
+
 responses.post('/:responseId/answers', async (c) => {
+  try {
+    const responseId = c.req.param('responseId')
+    const { question_id, value } = await c.req.json()
+    const answerId = crypto.randomUUID()
+
+    await c.env.survey_builder_db
+      .prepare(
+        `
+				INSERT INTO answers (
+					id,
+					response_id,
+					question_id,
+					value
+				)
+				VALUES (?, ?, ?, ?)
+				`,
+      )
+      .bind(answerId, responseId, question_id, value || '')
+      .run()
+
+    return c.json({
+      success: true,
+      answerId,
+    })
+  } catch (error) {
+    console.error(error)
+    return c.json({ error: String(error) }, 500)
+  }
+})
+
+responses.get('/:responseId/answers', async (c) => {
   const responseId = c.req.param('responseId')
 
-  const answerId = crypto.randomUUID()
-
-  await c.env.survey_builder_db
+  const result = await c.env.survey_builder_db
     .prepare(
       `
-			INSERT INTO answers (
-				id,
-				response_id,
-				question_id,
-				value
-			)
-			VALUES (?, ?, ?, ?)
-			`,
-    )
-    .bind(answerId, responseId, 'a6fa14a7-c11e-4806-be4d-bc804888f4eb', 'John Doe')
-    .run()
-
-  return c.json({
-    success: true,
-    answerId,
-  })
-})
-responses.get('/:responseId/answers', async (c) => {
-	const responseId = c.req.param('responseId')
-
-	const result = await c.env.survey_builder_db
-		.prepare(
-			`
 			SELECT *
 			FROM answers
 			WHERE response_id = ?
 			`,
-		)
-		.bind(responseId)
-		.all()
+    )
+    .bind(responseId)
+    .all()
 
-	return c.json(result.results)
+  return c.json(result.results)
 })
+
 export default responses
