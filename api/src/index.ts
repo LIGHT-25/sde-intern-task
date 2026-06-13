@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import surveys from './routes/surveys'
-
+import questions from './routes/questions'
 const app = new Hono<{ Bindings: Env }>()
 
 app.get('/api/health', (c) => c.json({ status: 'ok' }))
@@ -15,4 +15,5 @@ app.get('/api/db-test', async (c) => {
 	return c.json(tables.results)
 })
 app.route('/api/surveys', surveys)
+app.route('/api/questions', questions)
 export default app
