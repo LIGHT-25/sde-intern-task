@@ -18,7 +18,9 @@ const QUESTION_STORAGE_KEY = 'survey_builder_questions'
 const ANSWER_STORAGE_KEY = 'survey_builder_answers'
 
 // API base path (proxied by Vite)
-const API_BASE = '/api'
+const API_BASE =
+	import.meta.env.VITE_API_URL ||
+	'https://sde-intern-task-api.rupak-api.workers.dev'
 
 // --- Local Storage Helpers ---
 
