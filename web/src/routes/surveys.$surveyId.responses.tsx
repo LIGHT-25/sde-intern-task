@@ -4,11 +4,11 @@ import {
   Calendar,
   ChevronRight,
   ClipboardList,
+  Download,
   ExternalLink,
   FileText,
   RefreshCw,
   Users,
-  Download,
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '../components/ui/button'
@@ -132,10 +132,7 @@ function ResponseDashboard() {
         for (const answer of answersData) {
           let displayValue = answer.value
           try {
-            if (
-              answer.value &&
-              (answer.value.startsWith('{') || answer.value.startsWith('['))
-            ) {
+            if (answer.value && (answer.value.startsWith('{') || answer.value.startsWith('['))) {
               const parsed = JSON.parse(answer.value)
               displayValue = parsed.value || answer.value
             }
@@ -172,10 +169,7 @@ function ResponseDashboard() {
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.setAttribute(
-        'download',
-        `${survey.title.replace(/[^a-zA-Z0-9]/g, '_')}_responses.csv`,
-      )
+      link.setAttribute('download', `${survey.title.replace(/[^a-zA-Z0-9]/g, '_')}_responses.csv`)
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -481,7 +475,10 @@ function ResponseDashboard() {
                 let questionType = ''
 
                 try {
-                  if (answer.value && (answer.value.startsWith('{') || answer.value.startsWith('['))) {
+                  if (
+                    answer.value &&
+                    (answer.value.startsWith('{') || answer.value.startsWith('['))
+                  ) {
                     const parsed = JSON.parse(answer.value)
                     displayValue = parsed.value
                     questionTitle = parsed.question_title

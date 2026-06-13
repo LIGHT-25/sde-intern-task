@@ -23,8 +23,8 @@ import { Card, CardContent } from '../components/ui/card'
 import { Input, Textarea } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Select } from '../components/ui/select'
-import { apiService } from '../services/api'
 import { hexToColorName } from '../lib/utils'
+import { apiService } from '../services/api'
 import type { Question, QuestionConfig, QuestionType, Survey } from '../types/survey'
 
 export const Route = createFileRoute('/surveys/$surveyId/edit')({
@@ -314,9 +314,7 @@ function SurveyBuilder() {
             size="sm"
             onClick={() => setShowPreview(!showPreview)}
             className={`gap-1 text-xs font-semibold ${
-              showPreview
-                ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                : ''
+              showPreview ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : ''
             }`}
           >
             {showPreview ? (
@@ -343,7 +341,9 @@ function SurveyBuilder() {
       {/* Workspace split */}
       <div className={`flex-1 grid gap-0 ${showPreview ? 'md:grid-cols-12' : 'md:grid-cols-12'}`}>
         {/* Left column - Settings / Branding */}
-        <aside className={`${showPreview ? 'md:col-span-3' : 'md:col-span-4'} bg-white border-r border-slate-200 p-6 flex flex-col justify-between overflow-y-auto max-h-[calc(100vh-65px)]`}>
+        <aside
+          className={`${showPreview ? 'md:col-span-3' : 'md:col-span-4'} bg-white border-r border-slate-200 p-6 flex flex-col justify-between overflow-y-auto max-h-[calc(100vh-65px)]`}
+        >
           <div className="space-y-6 text-left">
             <div>
               <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
@@ -473,7 +473,9 @@ function SurveyBuilder() {
         </aside>
 
         {/* Right column - Question Builder Canvas */}
-        <main className={`${showPreview ? 'md:col-span-5' : 'md:col-span-8'} p-6 lg:p-10 overflow-y-auto max-h-[calc(100vh-65px)]`}>
+        <main
+          className={`${showPreview ? 'md:col-span-5' : 'md:col-span-8'} p-6 lg:p-10 overflow-y-auto max-h-[calc(100vh-65px)]`}
+        >
           <div className="max-w-3xl mx-auto space-y-6">
             {/* Header / Instructions */}
             <div className="flex items-center justify-between text-left">
@@ -777,9 +779,7 @@ function SurveyBuilder() {
                     {survey.title || 'Untitled Survey'}
                   </h3>
                   {survey.description && (
-                    <p className="text-xs text-white/80 mt-1 line-clamp-2">
-                      {survey.description}
-                    </p>
+                    <p className="text-xs text-white/80 mt-1 line-clamp-2">{survey.description}</p>
                   )}
                 </div>
 
@@ -808,7 +808,9 @@ function SurveyBuilder() {
                           {/* Text input preview */}
                           {q.type === 'text' && (
                             <div className="h-8 bg-slate-50 border border-slate-200 rounded-md px-2 flex items-center">
-                              <span className="text-[10px] text-slate-300">Type your answer...</span>
+                              <span className="text-[10px] text-slate-300">
+                                Type your answer...
+                              </span>
                             </div>
                           )}
 
@@ -820,15 +822,25 @@ function SurveyBuilder() {
                                   key={optIdx}
                                   className="h-7 border border-slate-200 rounded-md px-2.5 flex items-center text-[10px] text-slate-500 hover:border-indigo-300 transition-colors cursor-default"
                                   style={{
-                                    borderColor: optIdx === 0 ? (survey.primary_color || '#4f46e5') : undefined,
-                                    backgroundColor: optIdx === 0 ? `${survey.primary_color || '#4f46e5'}08` : undefined,
+                                    borderColor:
+                                      optIdx === 0 ? survey.primary_color || '#4f46e5' : undefined,
+                                    backgroundColor:
+                                      optIdx === 0
+                                        ? `${survey.primary_color || '#4f46e5'}08`
+                                        : undefined,
                                   }}
                                 >
                                   <div
                                     className="w-2.5 h-2.5 rounded-full border-2 mr-2 flex-shrink-0"
                                     style={{
-                                      borderColor: optIdx === 0 ? (survey.primary_color || '#4f46e5') : '#cbd5e1',
-                                      backgroundColor: optIdx === 0 ? (survey.primary_color || '#4f46e5') : 'transparent',
+                                      borderColor:
+                                        optIdx === 0
+                                          ? survey.primary_color || '#4f46e5'
+                                          : '#cbd5e1',
+                                      backgroundColor:
+                                        optIdx === 0
+                                          ? survey.primary_color || '#4f46e5'
+                                          : 'transparent',
                                     }}
                                   />
                                   {opt}
@@ -845,8 +857,8 @@ function SurveyBuilder() {
                                   key={i}
                                   className="h-4 w-4"
                                   style={{
-                                    color: i < 3 ? (survey.primary_color || '#4f46e5') : '#e2e8f0',
-                                    fill: i < 3 ? (survey.primary_color || '#4f46e5') : 'none',
+                                    color: i < 3 ? survey.primary_color || '#4f46e5' : '#e2e8f0',
+                                    fill: i < 3 ? survey.primary_color || '#4f46e5' : 'none',
                                   }}
                                 />
                               ))}

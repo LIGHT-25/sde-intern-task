@@ -240,14 +240,11 @@ function PublicSurvey() {
     )
   }
 
-   // --- MAIN SURVEY FILLING FORM ---
+  // --- MAIN SURVEY FILLING FORM ---
   return (
     <div style={customStyle} className="min-h-screen bg-slate-50 flex flex-col">
       {/* Branded Header */}
-      <div
-        className="w-full text-center px-6 py-8"
-        style={{ backgroundColor: primaryThemeColor }}
-      >
+      <div className="w-full text-center px-6 py-8" style={{ backgroundColor: primaryThemeColor }}>
         {survey.logo_url && (
           <img
             src={survey.logo_url}
