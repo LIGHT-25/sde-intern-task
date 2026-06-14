@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   BarChart2,
   Check,
+  CloudUpload,
   Copy,
   Eye,
   EyeOff,
@@ -23,7 +24,7 @@ import { Card, CardContent } from '../components/ui/card'
 import { Input, Textarea } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Select } from '../components/ui/select'
-import { hexToColorName } from '../lib/utils'
+import { colorNameToHex, hexToColorName } from '../lib/utils'
 import { apiService } from '../services/api'
 import type { Question, QuestionConfig, QuestionType, Survey } from '../types/survey'
 
@@ -52,6 +53,9 @@ function SurveyBuilder() {
   const [isLoading, setIsLoading] = useState(true)
   const [_isSaving, _setIsSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [colorInput, setColorInput] = useState('')
+  const [isPublishing, setIsPublishing] = useState(false)
+  const [publishStatus, setPublishStatus] = useState<'idle' | 'success' | 'error'>('idle')
 
   // Drag and drop state
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
@@ -81,6 +85,7 @@ function SurveyBuilder() {
     try {
       const surveyData = await apiService.getSurveyById(surveyId)
       setSurvey(surveyData)
+      setColorInput(hexToColorName(surveyData.primary_color || '#4f46e5'))
 
       const questionData = await apiService.getQuestions(surveyId)
       // Sort by position just in case
@@ -101,6 +106,9 @@ function SurveyBuilder() {
     if (!survey) return
     const updated = { ...survey, [field]: value }
     setSurvey(updated)
+    if (field === 'primary_color') {
+      setColorInput(hexToColorName(value))
+    }
     triggerAutoSave(updated, questions)
   }
 
@@ -234,6 +242,68 @@ function SurveyBuilder() {
     }, 600)
   }
 
+  // --- PUBLISH / SYNC CHANGES ---
+
+  const handleUpdateChanges = async () => {
+    if (!survey) return
+    setIsPublishing(true)
+    setPublishStatus('idle')
+    try {
+      // 1. Sync survey metadata
+      await apiService.updateSurvey(survey.id, {
+        title: survey.title,
+        description: survey.description,
+        primary_color: survey.primary_color,
+        logo_url: survey.logo_url,
+      })
+
+      // 2. Fetch server questions to reconcile
+      const API_BASE =
+        import.meta.env.VITE_API_URL || 'https://sde-intern-task-api.rupak-api.workers.dev/api'
+      const res = await fetch(`${API_BASE}/questions/${survey.id}`)
+      if (res.ok) {
+        const dbQuestions: Question[] = await res.json()
+        const dbIds = new Set(dbQuestions.map((q) => q.id))
+        const localIds = new Set(questions.map((q) => q.id))
+
+        // A. Delete server questions that do not exist locally
+        for (const dbQ of dbQuestions) {
+          if (!localIds.has(dbQ.id)) {
+            await apiService.deleteQuestion(survey.id, dbQ.id)
+          }
+        }
+
+        // B. Update/Create questions
+        for (const q of questions) {
+          if (dbIds.has(q.id)) {
+            // Update
+            await apiService.updateQuestion(survey.id, q.id, {
+              title: q.title,
+              type: q.type,
+              position: q.position,
+              config_json: q.config_json,
+            })
+          } else {
+            // Create on server
+            await fetch(`${API_BASE}/questions/${survey.id}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ type: q.type, title: q.title }),
+            })
+          }
+        }
+      }
+
+      setPublishStatus('success')
+      setTimeout(() => setPublishStatus('idle'), 3000)
+    } catch (err) {
+      console.error('Failed to sync changes:', err)
+      setPublishStatus('error')
+    } finally {
+      setIsPublishing(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -335,6 +405,47 @@ function SurveyBuilder() {
               <Eye className="h-4 w-4" /> Open Public
             </Button>
           </Link>
+          <Button
+            onClick={handleUpdateChanges}
+            disabled={isPublishing}
+            size="sm"
+            className="gap-1 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+          >
+            {isPublishing ? (
+              <>
+                <svg
+                  className="animate-spin h-3.5 w-3.5 text-white"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                  />
+                </svg>
+                Updating...
+              </>
+            ) : publishStatus === 'success' ? (
+              <>
+                <Check className="h-3.5 w-3.5" /> Updated!
+              </>
+            ) : publishStatus === 'error' ? (
+              <>Error!</>
+            ) : (
+              <>
+                <CloudUpload className="h-3.5 w-3.5" /> Update Changes
+              </>
+            )}
+          </Button>
         </div>
       </header>
 
@@ -449,13 +560,20 @@ function SurveyBuilder() {
                 />
                 <div className="flex-1 space-y-1">
                   <Input
-                    value={survey.primary_color || ''}
-                    onChange={(e) => handleUpdateSurveyField('primary_color', e.target.value)}
-                    placeholder="#4f46e5"
-                    className="font-mono text-sm uppercase h-9"
+                    value={colorInput}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setColorInput(val)
+                      const hex = colorNameToHex(val)
+                      if (hex) {
+                        handleUpdateSurveyField('primary_color', hex)
+                      }
+                    }}
+                    placeholder="e.g. Rose"
+                    className="text-sm h-9"
                   />
                   <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                    {hexToColorName(survey.primary_color || '#4f46e5')}
+                    {survey.primary_color || '#4f46e5'}
                   </span>
                 </div>
               </div>

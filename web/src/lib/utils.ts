@@ -97,3 +97,30 @@ export function hexToColorName(hex: string): string {
 
   return closestName
 }
+
+/**
+ * Converts a friendly color name back to a hex code.
+ * If the input is already a valid hex code, returns it normalized.
+ */
+export function colorNameToHex(name: string): string {
+  if (!name) return ''
+
+  const normalizedName = name.toLowerCase().trim()
+
+  // Try exact match in COLOR_NAMES (checking known names)
+  for (const [hex, knownName] of Object.entries(COLOR_NAMES)) {
+    if (knownName.toLowerCase() === normalizedName) {
+      return hex
+    }
+  }
+
+  // Handle standard hex codes with or without '#'
+  if (/^#[0-9a-f]{6}$/i.test(normalizedName)) {
+    return normalizedName.toLowerCase()
+  }
+  if (/^[0-9a-f]{6}$/i.test(normalizedName)) {
+    return `#${normalizedName.toLowerCase()}`
+  }
+
+  return ''
+}

@@ -74,7 +74,13 @@ export const apiService = {
   // --- SURVEYS ---
 
   async getSurveys(): Promise<Survey[]> {
-    const res = await fetch(`${API_BASE}/surveys`)
+    const headers: Record<string, string> = {}
+    const email = localStorage.getItem('survey_user_email')
+    if (email) {
+      headers.Authorization = `Bearer ${email}`
+    }
+
+    const res = await fetch(`${API_BASE}/surveys`, { headers })
     if (!res.ok) throw new Error('Failed to fetch surveys')
     const dbSurveys: Survey[] = await res.json()
 
@@ -119,9 +125,15 @@ export const apiService = {
   },
 
   async createSurvey(title: string = 'My First Survey'): Promise<Survey> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const email = localStorage.getItem('survey_user_email')
+    if (email) {
+      headers.Authorization = `Bearer ${email}`
+    }
+
     const res = await fetch(`${API_BASE}/surveys`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ title }),
     })
     if (!res.ok) throw new Error('Failed to create survey')
@@ -130,7 +142,7 @@ export const apiService = {
     // Store in local overrides to set initial dynamic title
     const newSurvey: Survey = {
       id: data.id,
-      owner_id: 'test-user',
+      owner_id: email || 'test-user',
       title,
       description: 'A brand new survey.',
       primary_color: '#4f46e5',
@@ -142,10 +154,16 @@ export const apiService = {
   },
 
   async updateSurvey(id: string, updates: Partial<Survey>): Promise<void> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const email = localStorage.getItem('survey_user_email')
+    if (email) {
+      headers.Authorization = `Bearer ${email}`
+    }
+
     // Fire real network request for standard dashboard PUT demonstration
     await fetch(`${API_BASE}/surveys/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(updates),
     })
 
@@ -154,8 +172,15 @@ export const apiService = {
   },
 
   async deleteSurvey(id: string): Promise<void> {
+    const headers: Record<string, string> = {}
+    const email = localStorage.getItem('survey_user_email')
+    if (email) {
+      headers.Authorization = `Bearer ${email}`
+    }
+
     await fetch(`${API_BASE}/surveys/${id}`, {
       method: 'DELETE',
+      headers,
     })
 
     // Clear local overrides
@@ -180,15 +205,29 @@ export const apiService = {
     const localList = localAll[surveyId]
 
     if (localList && localList.length > 0) {
-      // Return local list since positions & updates are managed locally
-      // We will ensure that we match database question IDs where possible
-      return localList
+      // Deduplicate local list by ID to clean up any duplicates
+      const seen = new Set<string>()
+      const dedupedList = localList.filter((q) => {
+        if (seen.has(q.id)) return false
+        seen.add(q.id)
+        return true
+      })
+      if (dedupedList.length !== localList.length) {
+        saveLocalQuestions(surveyId, dedupedList)
+      }
+      return dedupedList
     }
 
     // Fallback/Initial: If no local overrides exist, use database questions and initialize local cache
     if (dbQuestions.length > 0) {
-      saveLocalQuestions(surveyId, dbQuestions)
-      return dbQuestions
+      const seen = new Set<string>()
+      const dedupedDb = dbQuestions.filter((q) => {
+        if (seen.has(q.id)) return false
+        seen.add(q.id)
+        return true
+      })
+      saveLocalQuestions(surveyId, dedupedDb)
+      return dedupedDb
     }
 
     return []
@@ -229,7 +268,9 @@ export const apiService = {
       config_json: JSON.stringify(config),
     }
 
-    const updatedQuestions = [...currentQuestions, newQuestion]
+    const updatedQuestions = currentQuestions.some((q) => q.id === data.id)
+      ? currentQuestions
+      : [...currentQuestions, newQuestion]
     saveLocalQuestions(surveyId, updatedQuestions)
 
     return newQuestion
@@ -378,6 +419,4 @@ export const apiService = {
     }
     return allAnswers
   },
-  
 }
-

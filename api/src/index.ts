@@ -6,7 +6,14 @@ import surveys from './routes/surveys'
 
 const app = new Hono<{ Bindings: Env }>()
 
-app.use('/api/*', cors())
+app.use(
+  '/api/*',
+  cors({
+    origin: '*',
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization'],
+  }),
+)
 
 app.use('/api/*', async (c, next) => {
   try {
@@ -16,6 +23,23 @@ app.use('/api/*', async (c, next) => {
   } catch (err) {
     console.error('Failed to ensure default user exists:', err)
   }
+
+  // Parse the Authorization header to dynamically register the user in the database
+  const authHeader = c.req.header('Authorization')
+  if (authHeader) {
+    const ownerId = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : authHeader
+    if (ownerId && ownerId !== 'test-user') {
+      try {
+        await c.env.survey_builder_db
+          .prepare('INSERT OR IGNORE INTO users (id, email) VALUES (?, ?)')
+          .bind(ownerId, ownerId)
+          .run()
+      } catch (err) {
+        console.error('Failed to dynamically insert user:', err)
+      }
+    }
+  }
+
   await next()
 })
 

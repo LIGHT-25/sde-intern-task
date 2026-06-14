@@ -3,7 +3,16 @@ import { Hono } from 'hono'
 const surveys = new Hono<{ Bindings: Env }>()
 
 surveys.get('/', async (c) => {
-  const result = await c.env.survey_builder_db.prepare('SELECT * FROM surveys').all()
+  const authHeader = c.req.header('Authorization')
+  let ownerId = 'test-user'
+  if (authHeader) {
+    ownerId = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : authHeader
+  }
+
+  const result = await c.env.survey_builder_db
+    .prepare('SELECT * FROM surveys WHERE owner_id = ?')
+    .bind(ownerId)
+    .all()
   return c.json(result.results)
 })
 
@@ -32,6 +41,12 @@ surveys.post('/', async (c) => {
     const id = crypto.randomUUID()
     const { title } = await c.req.json().catch(() => ({ title: 'My First Survey' }))
 
+    const authHeader = c.req.header('Authorization')
+    let ownerId = 'test-user'
+    if (authHeader) {
+      ownerId = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : authHeader
+    }
+
     await c.env.survey_builder_db
       .prepare(
         `
@@ -46,7 +61,7 @@ surveys.post('/', async (c) => {
 				VALUES (?, ?, ?, ?, ?, ?)
 				`,
       )
-      .bind(id, 'test-user', title || 'My First Survey', 'A brand new survey.', '#4f46e5', '')
+      .bind(id, ownerId, title || 'My First Survey', 'A brand new survey.', '#4f46e5', '')
       .run()
 
     return c.json({
@@ -66,7 +81,16 @@ surveys.post('/', async (c) => {
 
 surveys.delete('/:id', async (c) => {
   const id = c.req.param('id')
-  await c.env.survey_builder_db.prepare('DELETE FROM surveys WHERE id = ?').bind(id).run()
+  const authHeader = c.req.header('Authorization')
+  let ownerId = 'test-user'
+  if (authHeader) {
+    ownerId = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : authHeader
+  }
+
+  await c.env.survey_builder_db
+    .prepare('DELETE FROM surveys WHERE id = ? AND owner_id = ?')
+    .bind(id, ownerId)
+    .run()
 
   return c.json({
     success: true,
@@ -75,6 +99,12 @@ surveys.delete('/:id', async (c) => {
 
 surveys.put('/:id', async (c) => {
   const id = c.req.param('id')
+  const authHeader = c.req.header('Authorization')
+  let ownerId = 'test-user'
+  if (authHeader) {
+    ownerId = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : authHeader
+  }
+
   try {
     const { title, description, primary_color, logo_url } = await c.req.json()
 
@@ -87,7 +117,7 @@ surveys.put('/:id', async (c) => {
 					description = ?,
 					primary_color = ?,
 					logo_url = ?
-				WHERE id = ?
+				WHERE id = ? AND owner_id = ?
 				`,
       )
       .bind(
@@ -96,6 +126,7 @@ surveys.put('/:id', async (c) => {
         primary_color || '#4f46e5',
         logo_url || '',
         id,
+        ownerId,
       )
       .run()
 

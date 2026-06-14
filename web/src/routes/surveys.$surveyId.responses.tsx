@@ -110,22 +110,59 @@ function ResponseDashboard() {
   const [isExporting, setIsExporting] = useState(false)
 
   const handleExportCSV = useCallback(async () => {
-    if (!survey || questions.length === 0) return
+    if (!survey) return
+    if (responses.length === 0) {
+      alert('No responses to export.')
+      return
+    }
     setIsExporting(true)
 
     try {
+      // Fetch questions directly from the API to avoid local storage mismatches
+      const API_BASE =
+        import.meta.env.VITE_API_URL || 'https://sde-intern-task-api.rupak-api.workers.dev/api'
+      const qRes = await fetch(`${API_BASE}/questions/${surveyId}`)
+      if (!qRes.ok) throw new Error('Failed to fetch questions from API')
+      const dbQuestions: Question[] = await qRes.json()
+      const sortedQuestions = [...dbQuestions].sort((a, b) => a.position - b.position)
+
+      if (sortedQuestions.length === 0) {
+        alert('No questions found for this survey. Cannot export CSV.')
+        setIsExporting(false)
+        return
+      }
+
       // Build header row: "Response ID", question titles..., "Submitted At"
       const headers = [
         'Response ID',
-        ...questions.map((q) => `${q.title} (${q.type})`),
+        ...sortedQuestions.map((q) => `${q.title} (${q.type})`),
         'Submitted At',
       ]
 
-      // For each response, fetch answers and build a row
+      // Fetch all answers in bulk
+      const allAnswersRes = await fetch(`${API_BASE}/responses/${surveyId}/all-answers`)
+      let allAnswers: Answer[] = []
+      if (allAnswersRes.ok) {
+        allAnswers = await allAnswersRes.json()
+      }
+
+      // Group answers by response_id
+      const answersByResponse: Record<string, Answer[]> = {}
+      for (const ans of allAnswers) {
+        if (!answersByResponse[ans.response_id]) {
+          answersByResponse[ans.response_id] = []
+        }
+        const list = answersByResponse[ans.response_id]
+        if (list) {
+          list.push(ans)
+        }
+      }
+
+      // For each response, build a row
       const rows: string[][] = []
 
       for (const response of responses) {
-        const answersData = await apiService.getResponseAnswers(response.id)
+        const answersData = answersByResponse[response.id] || []
 
         // Build a map of questionId -> display value
         const answerMap: Record<string, string> = {}
@@ -144,7 +181,7 @@ function ResponseDashboard() {
 
         const row = [
           response.id,
-          ...questions.map((q) => answerMap[q.id] || ''),
+          ...sortedQuestions.map((q) => answerMap[q.id] || ''),
           formatSubmittedDate(response.submitted_at),
         ]
         rows.push(row)
