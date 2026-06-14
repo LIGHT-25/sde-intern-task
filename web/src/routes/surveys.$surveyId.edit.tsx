@@ -3,6 +3,8 @@ import {
   ArrowLeft,
   BarChart2,
   Check,
+  ChevronDown,
+  ChevronUp,
   CloudUpload,
   Copy,
   Eye,
@@ -63,6 +65,8 @@ function SurveyBuilder() {
   // Copy state & handler
   const [copied, setCopied] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
+  const [actionsOpen, setActionsOpen] = useState(true)
+
   const handleCopyLink = () => {
     const url = `${window.location.origin}/s/${surveyId}`
     navigator.clipboard.writeText(url)
@@ -334,118 +338,236 @@ function SurveyBuilder() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Sub Header / Control Bar */}
-      <header className="sticky top-0 z-40 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <header className="sticky top-0 z-40 bg-white border-b border-slate-200 px-4 sm:px-6 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
           <Link to="/dashboard">
             <Button variant="ghost" size="sm" className="gap-1 text-slate-600 hover:text-slate-900">
               <ArrowLeft className="h-4 w-4" /> Back
             </Button>
           </Link>
-          <div className="h-4 w-[1px] bg-slate-200" />
-          <h2 className="text-base font-bold text-slate-900 line-clamp-1 max-w-[200px] sm:max-w-md">
-            {survey.title || 'Untitled Survey'}
-          </h2>
-          {saveStatus === 'saving' && (
-            <span className="text-xs text-slate-400 animate-pulse flex items-center gap-1">
-              <Save className="h-3 w-3" /> Auto-saving...
-            </span>
-          )}
-          {saveStatus === 'saved' && (
-            <span className="text-xs text-emerald-500 font-medium flex items-center gap-1 animate-in fade-in duration-300">
-              <Check className="h-3 w-3" /> All changes saved
-            </span>
-          )}
+          <div className="h-4 w-full border-t border-slate-200 sm:hidden" />
+          <div className="flex flex-col gap-1 min-w-0">
+            <h2 className="text-base font-bold text-slate-900 line-clamp-1 max-w-[200px] sm:max-w-md">
+              {survey.title || 'Untitled Survey'}
+            </h2>
+            {saveStatus === 'saving' && (
+              <span className="text-xs text-slate-400 animate-pulse flex items-center gap-1">
+                <Save className="h-3 w-3" /> Auto-saving...
+              </span>
+            )}
+            {saveStatus === 'saved' && (
+              <span className="text-xs text-emerald-500 font-medium flex items-center gap-1 animate-in fade-in duration-300">
+                <Check className="h-3 w-3" /> All changes saved
+              </span>
+            )}
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Link to="/surveys/$surveyId/responses" params={{ surveyId }}>
-            <Button variant="outline" size="sm" className="gap-1 text-xs font-semibold">
-              <BarChart2 className="h-4 w-4 text-slate-500" /> Responses
+        <div className="flex flex-col gap-2 sm:items-end">
+          <div className="flex items-center justify-between gap-2 sm:hidden">
+            <div className="text-right text-xs text-slate-500">Actions</div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setActionsOpen((prev) => !prev)}
+              className="gap-1 px-2 py-1.5 text-slate-600 hover:bg-slate-100"
+            >
+              {actionsOpen ? 'Hide' : 'Show'}
+              {actionsOpen ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
             </Button>
-          </Link>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleCopyLink}
-            className="gap-1 text-xs font-semibold"
-          >
-            {copied ? (
-              <>
-                <Check className="h-4 w-4 text-emerald-600" /> Copied Link
-              </>
-            ) : (
-              <>
-                <Copy className="h-4 w-4 text-slate-500" /> Copy Link
-              </>
-            )}
-          </Button>
-          <Button
-            variant={showPreview ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setShowPreview(!showPreview)}
-            className={`gap-1 text-xs font-semibold ${
-              showPreview ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : ''
+          </div>
+
+          <div
+            className={`grid gap-2 w-full transition-all duration-300 ease-out sm:hidden ${
+              actionsOpen ? 'max-h-300 opacity-100' : 'max-h-0 opacity-0 overflow-hidden'
             }`}
           >
-            {showPreview ? (
-              <>
-                <EyeOff className="h-4 w-4" /> Hide Preview
-              </>
-            ) : (
-              <>
-                <Monitor className="h-4 w-4 text-slate-500" /> Live Preview
-              </>
-            )}
-          </Button>
-          <Link to="/s/$surveyId" params={{ surveyId }} target="_blank">
-            <Button
-              size="sm"
-              className="gap-1 text-xs font-bold bg-slate-900 text-white hover:bg-slate-800"
-            >
-              <Eye className="h-4 w-4" /> Open Public
-            </Button>
-          </Link>
-          <Button
-            onClick={handleUpdateChanges}
-            disabled={isPublishing}
-            size="sm"
-            className="gap-1 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
-          >
-            {isPublishing ? (
-              <>
-                <svg
-                  className="animate-spin h-3.5 w-3.5 text-white"
-                  fill="none"
-                  viewBox="0 0 24 24"
+            <div className="grid grid-cols-1 gap-2">
+              <Link to="/surveys/$surveyId/responses" params={{ surveyId }}>
+                <Button variant="outline" size="sm" className="gap-1 text-xs font-semibold w-full h-11">
+                  <BarChart2 className="h-4 w-4 text-slate-500" /> Responses
+                </Button>
+              </Link>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCopyLink}
+                className="gap-1 text-xs font-semibold w-full h-11"
+              >
+                {copied ? (
+                  <>
+                    <Check className="h-4 w-4 text-emerald-600" /> Copied Link
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4 text-slate-500" /> Copy Link
+                  </>
+                )}
+              </Button>
+              <Button
+                variant={showPreview ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setShowPreview(!showPreview)}
+                className={`gap-1 text-xs font-semibold w-full h-11 ${
+                  showPreview ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : ''
+                }`}
+              >
+                {showPreview ? (
+                  <>
+                    <EyeOff className="h-4 w-4" /> Hide Preview
+                  </>
+                ) : (
+                  <>
+                    <Monitor className="h-4 w-4 text-slate-500" /> Live Preview
+                  </>
+                )}
+              </Button>
+              <Link to="/s/$surveyId" params={{ surveyId }} target="_blank">
+                <Button
+                  size="sm"
+                  className="gap-1 text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 w-full h-11"
                 >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                  />
-                </svg>
-                Updating...
-              </>
-            ) : publishStatus === 'success' ? (
-              <>
-                <Check className="h-3.5 w-3.5" /> Updated!
-              </>
-            ) : publishStatus === 'error' ? (
-              <>Error!</>
-            ) : (
-              <>
-                <CloudUpload className="h-3.5 w-3.5" /> Update Changes
-              </>
-            )}
-          </Button>
+                  <Eye className="h-4 w-4" /> Open Public
+                </Button>
+              </Link>
+              <Button
+                onClick={handleUpdateChanges}
+                disabled={isPublishing}
+                size="sm"
+                className="gap-1 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm w-full h-11"
+              >
+                {isPublishing ? (
+                  <>
+                    <svg
+                      className="animate-spin h-3.5 w-3.5 text-white"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                      />
+                    </svg>
+                    Updating...
+                  </>
+                ) : publishStatus === 'success' ? (
+                  <>
+                    <Check className="h-3.5 w-3.5" /> Updated!
+                  </>
+                ) : publishStatus === 'error' ? (
+                  <>Error!</>
+                ) : (
+                  <>
+                    <CloudUpload className="h-3.5 w-3.5" /> Update Changes
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+
+          <div className="hidden sm:grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+            <Link to="/surveys/$surveyId/responses" params={{ surveyId }}>
+              <Button variant="outline" size="sm" className="gap-1 text-xs font-semibold w-full h-11">
+                <BarChart2 className="h-4 w-4 text-slate-500" /> Responses
+              </Button>
+            </Link>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCopyLink}
+              className="gap-1 text-xs font-semibold w-full h-11"
+            >
+              {copied ? (
+                <>
+                  <Check className="h-4 w-4 text-emerald-600" /> Copied Link
+                </>
+              ) : (
+                <>
+                  <Copy className="h-4 w-4 text-slate-500" /> Copy Link
+                </>
+              )}
+            </Button>
+            <Button
+              variant={showPreview ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setShowPreview(!showPreview)}
+              className={`gap-1 text-xs font-semibold w-full h-11 ${
+                showPreview ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : ''
+              }`}
+            >
+              {showPreview ? (
+                <>
+                  <EyeOff className="h-4 w-4" /> Hide Preview
+                </>
+              ) : (
+                <>
+                  <Monitor className="h-4 w-4 text-slate-500" /> Live Preview
+                </>
+              )}
+            </Button>
+            <Link to="/s/$surveyId" params={{ surveyId }} target="_blank">
+              <Button
+                size="sm"
+                className="gap-1 text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 w-full h-11"
+              >
+                <Eye className="h-4 w-4" /> Open Public
+              </Button>
+            </Link>
+            <Button
+              onClick={handleUpdateChanges}
+              disabled={isPublishing}
+              size="sm"
+              className="gap-1 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm w-full h-11"
+            >
+              {isPublishing ? (
+                <>
+                  <svg
+                    className="animate-spin h-3.5 w-3.5 text-white"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                    />
+                  </svg>
+                  Updating...
+                </>
+              ) : publishStatus === 'success' ? (
+                <>
+                  <Check className="h-3.5 w-3.5" /> Updated!
+                </>
+              ) : publishStatus === 'error' ? (
+                <>Error!</>
+              ) : (
+                <>
+                  <CloudUpload className="h-3.5 w-3.5" /> Update Changes
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </header>
 
