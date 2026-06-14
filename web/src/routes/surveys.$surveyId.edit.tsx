@@ -23,6 +23,14 @@ import {
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '../components/ui/button'
 import { Card, CardContent } from '../components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../components/ui/dialog'
 import { Input, Textarea } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Select } from '../components/ui/select'
@@ -66,11 +74,19 @@ function SurveyBuilder() {
   const [copied, setCopied] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [actionsOpen, setActionsOpen] = useState(true)
+  const [showVersionMenu, setShowVersionMenu] = useState(false)
+  const [availableVersions, setAvailableVersions] = useState<string[]>([])
+  const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false)
+  const [isSuccessDialogOpen, setIsSuccessDialogOpen] = useState(false)
+  const [newVersionUrl, setNewVersionUrl] = useState('')
+  const [nextVersionString, setNextVersionString] = useState('')
 
-  const handleCopyLink = () => {
-    const url = `${window.location.origin}/s/${surveyId}`
+  const handleCopyLink = (version?: string) => {
+    const versionToCopy = version || survey?.version || 'v1.0'
+    const url = `${window.location.origin}/s/${surveyId}?v=${encodeURIComponent(versionToCopy)}`
     navigator.clipboard.writeText(url)
     setCopied(true)
+    setShowVersionMenu(false)
     setTimeout(() => setCopied(false), 2000)
   }
 
@@ -88,13 +104,48 @@ function SurveyBuilder() {
     setIsLoading(true)
     try {
       const surveyData = await apiService.getSurveyById(surveyId)
-      setSurvey(surveyData)
-      setColorInput(hexToColorName(surveyData.primary_color || '#4f46e5'))
+      const loadedSurvey = {
+        ...surveyData,
+        version: surveyData.version ?? 'v1.0',
+      }
+      setSurvey(loadedSurvey)
+      setColorInput(hexToColorName(loadedSurvey.primary_color || '#4f46e5'))
 
       const questionData = await apiService.getQuestions(surveyId)
       // Sort by position just in case
       const sorted = [...questionData].sort((a, b) => a.position - b.position)
       setQuestions(sorted)
+
+      // Load available versions from responses
+      try {
+        const API_BASE = import.meta.env.VITE_API_URL || '/api'
+        const res = await fetch(`${API_BASE}/responses/${surveyId}`)
+        if (res.ok) {
+          const responses = await res.json()
+          const versions = new Set<string>()
+          responses.forEach((r: { survey_version: string | null | undefined }) => {
+            versions.add(r.survey_version || 'v1.0')
+          })
+          // Add current version if not in list
+          versions.add(loadedSurvey.version || 'v1.0')
+          const sortedVersions = Array.from(versions).sort((a, b) => {
+            const aMatch = a.match(/v(\d+)\.(\d+)/)
+            const bMatch = b.match(/v(\d+)\.(\d+)/)
+            if (aMatch && bMatch && aMatch[1] && aMatch[2] && bMatch[1] && bMatch[2]) {
+              const aMajor = parseInt(aMatch[1], 10)
+              const aMinor = parseInt(aMatch[2], 10)
+              const bMajor = parseInt(bMatch[1], 10)
+              const bMinor = parseInt(bMatch[2], 10)
+              if (aMajor !== bMajor) return aMajor - bMajor
+              return aMinor - bMinor
+            }
+            return a.localeCompare(b)
+          })
+          setAvailableVersions(sortedVersions)
+        }
+      } catch (err) {
+        console.error('Failed to load available versions:', err)
+      }
     } catch (err) {
       console.error(err)
       alert('Failed to load survey data.')
@@ -248,61 +299,46 @@ function SurveyBuilder() {
 
   // --- PUBLISH / SYNC CHANGES ---
 
-  const handleUpdateChanges = async () => {
+  const bumpSurveyVersion = (version: string) => {
+    const match = version.match(/^v(\d+)\.(\d+)$/)
+    if (!match) {
+      return `${version}.1`
+    }
+    const [, majorGroup, minorGroup] = match
+    const major = parseInt(majorGroup ?? '0', 10)
+    const minor = parseInt(minorGroup ?? '0', 10)
+    return `v${major}.${minor + 1}`
+  }
+
+  const handleUpdateChangesClick = () => {
     if (!survey) return
+    const currentVersion = survey.version ?? 'v1.0'
+    const nextVer = bumpSurveyVersion(currentVersion)
+    setNextVersionString(nextVer)
+    setIsConfirmDialogOpen(true)
+  }
+
+  const handleConfirmPublish = async () => {
+    if (!survey) return
+    setIsConfirmDialogOpen(false)
     setIsPublishing(true)
     setPublishStatus('idle')
     try {
-      // 1. Sync survey metadata
-      await apiService.updateSurvey(survey.id, {
-        title: survey.title,
-        description: survey.description,
-        primary_color: survey.primary_color,
-        logo_url: survey.logo_url,
-      })
+      // Call backend API to bump version and snapshot questions
+      const bumpedVer = await apiService.bumpSurveyVersion(survey.id)
 
-      // 2. Fetch server questions to reconcile
-      const API_BASE =
-        import.meta.env.VITE_API_URL || 'https://sde-intern-task-api.rupak-api.workers.dev/api'
-      const res = await fetch(`${API_BASE}/questions/${survey.id}`)
-      if (res.ok) {
-        const dbQuestions: Question[] = await res.json()
-        const dbIds = new Set(dbQuestions.map((q) => q.id))
-        const localIds = new Set(questions.map((q) => q.id))
+      // Reload survey data (which fetches the new survey details and the new bumped questions with their new IDs)
+      await loadSurveyData()
 
-        // A. Delete server questions that do not exist locally
-        for (const dbQ of dbQuestions) {
-          if (!localIds.has(dbQ.id)) {
-            await apiService.deleteQuestion(survey.id, dbQ.id)
-          }
-        }
-
-        // B. Update/Create questions
-        for (const q of questions) {
-          if (dbIds.has(q.id)) {
-            // Update
-            await apiService.updateQuestion(survey.id, q.id, {
-              title: q.title,
-              type: q.type,
-              position: q.position,
-              config_json: q.config_json,
-            })
-          } else {
-            // Create on server
-            await fetch(`${API_BASE}/questions/${survey.id}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ type: q.type, title: q.title }),
-            })
-          }
-        }
-      }
-
+      const generatedUrl = `${window.location.origin}/s/${survey.id}?v=${encodeURIComponent(bumpedVer)}`
+      setNewVersionUrl(generatedUrl)
+      setIsSuccessDialogOpen(true)
       setPublishStatus('success')
-      setTimeout(() => setPublishStatus('idle'), 3000)
+      setTimeout(() => setPublishStatus('idle'), 3500)
     } catch (err) {
-      console.error('Failed to sync changes:', err)
+      console.error('Failed to bump version and sync changes:', err)
       setPublishStatus('error')
+      alert('Failed to publish changes.')
     } finally {
       setIsPublishing(false)
     }
@@ -347,9 +383,12 @@ function SurveyBuilder() {
           </Link>
           <div className="h-4 w-full border-t border-slate-200 sm:hidden" />
           <div className="flex flex-col gap-1 min-w-0">
-            <h2 className="text-base font-bold text-slate-900 line-clamp-1 max-w-[200px] sm:max-w-md">
-              {survey.title || 'Untitled Survey'}
-            </h2>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3">
+              <h2 className="text-base font-bold text-slate-900 line-clamp-1 max-w-[200px] sm:max-w-md">
+                {survey.title || 'Untitled Survey'}
+              </h2>
+              <span className="text-xs text-slate-500">Version {survey.version ?? 'v1.0'}</span>
+            </div>
             {saveStatus === 'saving' && (
               <span className="text-xs text-slate-400 animate-pulse flex items-center gap-1">
                 <Save className="h-3 w-3" /> Auto-saving...
@@ -388,26 +427,66 @@ function SurveyBuilder() {
           >
             <div className="grid grid-cols-1 gap-2">
               <Link to="/surveys/$surveyId/responses" params={{ surveyId }}>
-                <Button variant="outline" size="sm" className="gap-1 text-xs font-semibold w-full h-11">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 text-xs font-semibold w-full h-11"
+                >
                   <BarChart2 className="h-4 w-4 text-slate-500" /> Responses
                 </Button>
               </Link>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleCopyLink}
-                className="gap-1 text-xs font-semibold w-full h-11"
+              <div
+                className="relative group/version"
+                onMouseEnter={() => setShowVersionMenu(true)}
+                onMouseLeave={() => setShowVersionMenu(false)}
               >
-                {copied ? (
-                  <>
-                    <Check className="h-4 w-4 text-emerald-600" /> Copied Link
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-4 w-4 text-slate-500" /> Copy Link
-                  </>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 text-xs font-semibold w-full h-11"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="h-4 w-4 text-emerald-600" /> Copied Link
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-4 w-4 text-slate-500" /> Copy Link
+                    </>
+                  )}
+                  <ChevronDown className="h-3 w-3 ml-auto" />
+                </Button>
+                {showVersionMenu && availableVersions.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-md shadow-md z-50 py-1 transition-all duration-150 animate-in fade-in slide-in-from-top-1 text-left">
+                    <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                      Select version to copy:
+                    </div>
+                    {availableVersions.map((version, index) => {
+                      const isLatest = version === survey?.version
+                      const isOriginal = index === 0 && version === 'v1.0'
+                      return (
+                        <button
+                          key={version}
+                          onClick={() => handleCopyLink(version)}
+                          className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 border-b border-slate-100 last:border-b-0 font-medium text-slate-700 flex items-center justify-between transition-colors"
+                        >
+                          <span>{version} link</span>
+                          {isLatest && (
+                            <span className="text-[9px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                              Latest
+                            </span>
+                          )}
+                          {isOriginal && !isLatest && (
+                            <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                              Original
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
                 )}
-              </Button>
+              </div>
               <Button
                 variant={showPreview ? 'default' : 'outline'}
                 size="sm"
@@ -435,7 +514,7 @@ function SurveyBuilder() {
                 </Button>
               </Link>
               <Button
-                onClick={handleUpdateChanges}
+                onClick={handleUpdateChangesClick}
                 disabled={isPublishing}
                 size="sm"
                 className="gap-1 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm w-full h-11"
@@ -480,26 +559,66 @@ function SurveyBuilder() {
 
           <div className="hidden sm:grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
             <Link to="/surveys/$surveyId/responses" params={{ surveyId }}>
-              <Button variant="outline" size="sm" className="gap-1 text-xs font-semibold w-full h-11">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1 text-xs font-semibold w-full h-11"
+              >
                 <BarChart2 className="h-4 w-4 text-slate-500" /> Responses
               </Button>
             </Link>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleCopyLink}
-              className="gap-1 text-xs font-semibold w-full h-11"
+            <div
+              className="relative group/version"
+              onMouseEnter={() => setShowVersionMenu(true)}
+              onMouseLeave={() => setShowVersionMenu(false)}
             >
-              {copied ? (
-                <>
-                  <Check className="h-4 w-4 text-emerald-600" /> Copied Link
-                </>
-              ) : (
-                <>
-                  <Copy className="h-4 w-4 text-slate-500" /> Copy Link
-                </>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1 text-xs font-semibold w-full h-11"
+              >
+                {copied ? (
+                  <>
+                    <Check className="h-4 w-4 text-emerald-600" /> Copied Link
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4 text-slate-500" /> Copy Link
+                  </>
+                )}
+                <ChevronDown className="h-3 w-3 ml-auto" />
+              </Button>
+              {showVersionMenu && availableVersions.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-md shadow-md z-50 py-1 transition-all duration-150 animate-in fade-in slide-in-from-top-1 text-left">
+                  <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                    Select version to copy:
+                  </div>
+                  {availableVersions.map((version, index) => {
+                    const isLatest = version === survey?.version
+                    const isOriginal = index === 0 && version === 'v1.0'
+                    return (
+                      <button
+                        key={version}
+                        onClick={() => handleCopyLink(version)}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 border-b border-slate-100 last:border-b-0 font-medium text-slate-700 flex items-center justify-between transition-colors"
+                      >
+                        <span>{version} link</span>
+                        {isLatest && (
+                          <span className="text-[9px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                            Latest
+                          </span>
+                        )}
+                        {isOriginal && !isLatest && (
+                          <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                            Original
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
               )}
-            </Button>
+            </div>
             <Button
               variant={showPreview ? 'default' : 'outline'}
               size="sm"
@@ -527,7 +646,7 @@ function SurveyBuilder() {
               </Button>
             </Link>
             <Button
-              onClick={handleUpdateChanges}
+              onClick={handleUpdateChangesClick}
               disabled={isPublishing}
               size="sm"
               className="gap-1 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm w-full h-11"
@@ -1126,6 +1245,97 @@ function SurveyBuilder() {
           </aside>
         )}
       </div>
+
+      {/* Confirm Publish Dialog */}
+      <Dialog isOpen={isConfirmDialogOpen} onClose={() => setIsConfirmDialogOpen(false)}>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-slate-900">
+            <Sparkles className="h-5 w-5 text-indigo-500" /> Publish New Version
+          </DialogTitle>
+          <DialogDescription>
+            Confirm changes and publish a new version of the survey.
+          </DialogDescription>
+        </DialogHeader>
+
+        <DialogContent className="space-y-4">
+          <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-4 text-left space-y-3">
+            <p className="text-sm font-semibold text-slate-800">Version Change Summary:</p>
+            <div className="flex items-center gap-4 text-sm font-mono font-bold text-slate-700">
+              <div className="bg-slate-100 px-2 py-1 rounded border border-slate-200">
+                {survey.version || 'v1.0'}
+              </div>
+              <div className="text-slate-400">&rarr;</div>
+              <div className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded border border-indigo-200">
+                {nextVersionString}
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Publishing this update locks the current version ({survey.version || 'v1.0'})
+              questions. Previously submitted responses will be preserved under their respective
+              versions. A new URL will be generated specifically for this version.
+            </p>
+          </div>
+        </DialogContent>
+
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={() => setIsConfirmDialogOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            className="bg-indigo-600 hover:bg-indigo-700 text-white"
+            onClick={handleConfirmPublish}
+          >
+            Confirm & Publish
+          </Button>
+        </DialogFooter>
+      </Dialog>
+
+      {/* Success Dialog */}
+      <Dialog isOpen={isSuccessDialogOpen} onClose={() => setIsSuccessDialogOpen(false)}>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-emerald-600">
+            <Check className="h-5 w-5 bg-emerald-100 rounded-full p-0.5" /> Version Published!
+          </DialogTitle>
+          <DialogDescription>
+            Survey version {survey.version} is now live and accepting responses.
+          </DialogDescription>
+        </DialogHeader>
+
+        <DialogContent className="space-y-4 text-left">
+          <div className="space-y-2">
+            <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              New Version URL
+            </Label>
+            <div className="flex items-center gap-2">
+              <Input
+                readOnly
+                value={newVersionUrl}
+                className="bg-slate-50 text-slate-700 border-slate-200 font-mono text-xs select-all flex-1"
+              />
+              <Button
+                onClick={() => {
+                  navigator.clipboard.writeText(newVersionUrl)
+                  alert('Copied link to clipboard!')
+                }}
+                className="bg-slate-900 text-white hover:bg-slate-800 shrink-0 h-10 px-3"
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+
+        <DialogFooter>
+          <Button
+            className="bg-slate-900 text-white hover:bg-slate-800"
+            size="sm"
+            onClick={() => setIsSuccessDialogOpen(false)}
+          >
+            Done
+          </Button>
+        </DialogFooter>
+      </Dialog>
     </div>
   )
 }

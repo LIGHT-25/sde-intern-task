@@ -42,17 +42,39 @@ responses.post('/:surveyId', async (c) => {
   const surveyId = c.req.param('surveyId')
   const responseId = crypto.randomUUID()
 
+  // Check if version was passed in request body; otherwise fetch from survey
+  let surveyVersion: string | undefined
+  try {
+    const requestBody = (await c.req.json()) as Record<string, unknown> | null
+    if (requestBody && typeof requestBody.version === 'string') {
+      surveyVersion = requestBody.version
+    }
+  } catch {
+    // No body or invalid JSON, proceed with defaults
+  }
+
+  // If no version was provided in request, fetch from survey's current version
+  if (!surveyVersion) {
+    const surveyRecord = await c.env.survey_builder_db
+      .prepare('SELECT version FROM surveys WHERE id = ?')
+      .bind(surveyId)
+      .first()
+
+    surveyVersion = (surveyRecord?.version as string) || 'v1.0'
+  }
+
   await c.env.survey_builder_db
     .prepare(
       `
 			INSERT INTO responses (
 				id,
-				survey_id
+				survey_id,
+				survey_version
 			)
-			VALUES (?, ?)
+			VALUES (?, ?, ?)
 			`,
     )
-    .bind(responseId, surveyId)
+    .bind(responseId, surveyId, surveyVersion)
     .run()
 
   return c.json({

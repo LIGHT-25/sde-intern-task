@@ -7,7 +7,15 @@ export interface Survey {
   description: string | null
   primary_color: string
   logo_url: string | null
+  version?: string
   created_at?: string
+}
+
+export interface SurveyResponse {
+  id: string
+  survey_id: string
+  survey_version?: string
+  submitted_at: string
 }
 
 export interface QuestionConfig {
@@ -22,12 +30,6 @@ export interface Question {
   title: string
   position: number
   config_json: string // JSON string stored in the database representing QuestionConfig
-}
-
-export interface SurveyResponse {
-  id: string
-  survey_id: string
-  submitted_at: string
 }
 
 export interface Answer {

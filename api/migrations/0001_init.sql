@@ -11,6 +11,7 @@ CREATE TABLE surveys (
   description TEXT,
   primary_color TEXT DEFAULT '#2563eb',
   logo_url TEXT,
+  version TEXT NOT NULL DEFAULT 'v1.0',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (owner_id) REFERENCES users(id)
 );
@@ -29,6 +30,7 @@ CREATE TABLE questions (
 CREATE TABLE responses (
   id TEXT PRIMARY KEY,
   survey_id TEXT NOT NULL,
+  survey_version TEXT NOT NULL DEFAULT 'v1.0',
   submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (survey_id) REFERENCES surveys(id)
 );

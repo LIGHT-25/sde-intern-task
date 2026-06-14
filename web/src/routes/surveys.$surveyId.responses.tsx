@@ -10,7 +10,7 @@ import {
   RefreshCw,
   Users,
 } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button } from '../components/ui/button'
 import { Card, CardContent } from '../components/ui/card'
 import {
@@ -39,6 +39,7 @@ function ResponseDashboard() {
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState('')
+  const [selectedVersion, setSelectedVersion] = useState('all')
 
   // Detailed Modal State
   const [selectedResponse, setSelectedResponse] = useState<SurveyResponse | null>(null)
@@ -66,6 +67,7 @@ function ResponseDashboard() {
 
       const responseData = await apiService.getResponses(surveyId)
       setResponses(responseData)
+      setSelectedVersion('all')
       setError('')
     } catch (err) {
       console.error(err)
@@ -74,6 +76,22 @@ function ResponseDashboard() {
       setIsLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (!surveyId) return
+    const reloadQuestions = async () => {
+      try {
+        const versionParam = selectedVersion === 'all' ? undefined : selectedVersion
+        const questionData = await apiService.getQuestions(surveyId, versionParam)
+        setQuestions(questionData)
+      } catch (err) {
+        console.error('Failed to reload questions for version:', err)
+      }
+    }
+    if (!isLoading) {
+      reloadQuestions()
+    }
+  }, [selectedVersion, surveyId, isLoading])
 
   const handleRefresh = async () => {
     setIsRefreshing(true)
@@ -108,20 +126,50 @@ function ResponseDashboard() {
 
   // --- CSV EXPORT ---
   const [isExporting, setIsExporting] = useState(false)
+  const [showExportConfirm, setShowExportConfirm] = useState(false)
 
-  const handleExportCSV = useCallback(async () => {
+  const versionOptions = useMemo(() => {
+    const versions = new Set<string>()
+    responses.forEach((response) => {
+      versions.add(response.survey_version ?? 'v1.0')
+    })
+    return Array.from(versions).sort()
+  }, [responses])
+
+  const filteredResponses = useMemo(
+    () =>
+      selectedVersion === 'all'
+        ? responses
+        : responses.filter((response) => (response.survey_version ?? 'v1.0') === selectedVersion),
+    [responses, selectedVersion],
+  )
+
+  const handleExportCSV = useCallback(() => {
     if (!survey) return
-    if (responses.length === 0) {
-      alert('No responses to export.')
+    if (selectedVersion === 'all') {
+      alert(
+        'Please filter by a specific version before exporting responses to ensure the columns match the survey structure.',
+      )
       return
     }
+    if (filteredResponses.length === 0) {
+      alert('No responses to export for this version.')
+      return
+    }
+    setShowExportConfirm(true)
+  }, [survey, filteredResponses, selectedVersion])
+
+  const confirmExport = useCallback(async () => {
+    if (!survey) return
+    setShowExportConfirm(false)
     setIsExporting(true)
 
     try {
-      // Fetch questions directly from the API to avoid local storage mismatches
-      const API_BASE =
-        import.meta.env.VITE_API_URL || 'https://sde-intern-task-api.rupak-api.workers.dev/api'
-      const qRes = await fetch(`${API_BASE}/questions/${surveyId}`)
+      // Fetch questions directly from the API for the selected version
+      const API_BASE = import.meta.env.VITE_API_URL || '/api'
+      const versionQuery =
+        selectedVersion === 'all' ? '' : `?v=${encodeURIComponent(selectedVersion)}`
+      const qRes = await fetch(`${API_BASE}/questions/${surveyId}${versionQuery}`)
       if (!qRes.ok) throw new Error('Failed to fetch questions from API')
       const dbQuestions: Question[] = await qRes.json()
       const sortedQuestions = [...dbQuestions].sort((a, b) => a.position - b.position)
@@ -132,10 +180,11 @@ function ResponseDashboard() {
         return
       }
 
-      // Build header row: "Response ID", question titles..., "Submitted At"
+      // Build header row: "Response ID", question titles..., "Survey Version", "Submitted At"
       const headers = [
         'Response ID',
         ...sortedQuestions.map((q) => `${q.title} (${q.type})`),
+        'Survey Version',
         'Submitted At',
       ]
 
@@ -161,7 +210,7 @@ function ResponseDashboard() {
       // For each response, build a row
       const rows: string[][] = []
 
-      for (const response of responses) {
+      for (const response of filteredResponses) {
         const answersData = answersByResponse[response.id] || []
 
         // Build a map of questionId -> display value
@@ -182,6 +231,7 @@ function ResponseDashboard() {
         const row = [
           response.id,
           ...sortedQuestions.map((q) => answerMap[q.id] || ''),
+          response.survey_version || 'v1.0',
           formatSubmittedDate(response.submitted_at),
         ]
         rows.push(row)
@@ -217,7 +267,7 @@ function ResponseDashboard() {
     } finally {
       setIsExporting(false)
     }
-  }, [survey, questions, responses])
+  }, [survey, filteredResponses, surveyId])
 
   const formatSubmittedDate = (dateStr: string) => {
     try {
@@ -292,13 +342,31 @@ function ResponseDashboard() {
               <ArrowLeft className="h-4 w-4" /> Dashboard
             </Button>
           </Link>
-          <div className="h-4 w-[1px] bg-slate-200" />
-          <h2 className="text-base font-bold text-slate-900 line-clamp-1 max-w-[200px] sm:max-w-md">
+          <div className="h-4 w-px bg-slate-200" />
+          <h2 className="text-base font-bold text-slate-900 line-clamp-1 max-w-50 sm:max-w-md">
             {survey.title} Responses
           </h2>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <label htmlFor="version-filter" className="text-xs font-semibold text-slate-500">
+              Version
+            </label>
+            <select
+              id="version-filter"
+              value={selectedVersion}
+              onChange={(e) => setSelectedVersion(e.target.value)}
+              className="rounded-md border border-slate-200 bg-white text-sm text-slate-700 px-3 py-2"
+            >
+              <option value="all">All versions</option>
+              {versionOptions.map((version) => (
+                <option key={version} value={version}>
+                  {version}
+                </option>
+              ))}
+            </select>
+          </div>
           <Button
             variant="outline"
             size="sm"
@@ -315,7 +383,7 @@ function ResponseDashboard() {
             variant="outline"
             size="sm"
             onClick={handleExportCSV}
-            disabled={isExporting || responses.length === 0}
+            disabled={isExporting || filteredResponses.length === 0}
             className="gap-1 text-xs font-semibold"
           >
             <Download
@@ -335,7 +403,7 @@ function ResponseDashboard() {
       </header>
 
       {/* Main Container */}
-      <main className="flex-grow max-w-6xl w-full mx-auto px-4 py-8 space-y-6">
+      <main className="grow max-w-6xl w-full mx-auto px-4 py-8 space-y-6">
         {/* Title Section */}
         <div className="text-left">
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
@@ -403,10 +471,10 @@ function ResponseDashboard() {
         <Card className="bg-white border-slate-200/80 shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
             <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-              All Submissions
+              {selectedVersion === 'all' ? 'All Submissions' : `${selectedVersion} Submissions`}
             </h3>
             <span className="text-xs font-semibold bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">
-              {responses.length} rows
+              {filteredResponses.length} rows
             </span>
           </div>
 
@@ -429,6 +497,18 @@ function ResponseDashboard() {
                 </Link>
               </div>
             </div>
+          ) : filteredResponses.length === 0 ? (
+            <div className="text-center py-20 p-6">
+              <div className="mx-auto w-12 h-12 bg-slate-100 text-slate-400 rounded-xl flex items-center justify-center mb-4">
+                <ClipboardList className="h-5 w-5" />
+              </div>
+              <h4 className="text-sm font-bold text-slate-800">
+                No responses match the selected version
+              </h4>
+              <p className="text-xs text-slate-400 max-w-xs mx-auto mt-1 leading-normal">
+                Try selecting a different version or choose "All versions" to view all submissions.
+              </p>
+            </div>
           ) : (
             /* Table list */
             <div className="overflow-x-auto">
@@ -436,19 +516,23 @@ function ResponseDashboard() {
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/30 text-xs font-bold text-slate-500 uppercase tracking-wider select-none">
                     <th className="px-6 py-4">Submission ID</th>
+                    <th className="px-6 py-4">Version</th>
                     <th className="px-6 py-4">Date Submitted</th>
                     <th className="px-6 py-4 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-sm">
-                  {responses.map((response) => (
+                  {filteredResponses.map((response) => (
                     <tr
                       key={response.id}
                       onClick={() => handleRowClick(response)}
                       className="hover:bg-slate-50/80 cursor-pointer transition-colors group"
                     >
-                      <td className="px-6 py-4 font-mono text-xs text-slate-600 font-medium max-w-[200px] sm:max-w-xs truncate">
+                      <td className="px-6 py-4 font-mono text-xs text-slate-600 font-medium max-w-50 sm:max-w-xs truncate">
                         {response.id}
+                      </td>
+                      <td className="px-6 py-4 text-slate-700 font-medium">
+                        {response.survey_version || 'v1.0'}
                       </td>
                       <td className="px-6 py-4 text-slate-700 font-medium">
                         {formatSubmittedDate(response.submitted_at)}
@@ -562,6 +646,53 @@ function ResponseDashboard() {
               Close
             </Button>
           </div>
+        </DialogFooter>
+      </Dialog>
+
+      {/* Export Confirmation Dialog */}
+      <Dialog isOpen={showExportConfirm} onClose={() => setShowExportConfirm(false)}>
+        <DialogHeader>
+          <DialogTitle>Confirm Export</DialogTitle>
+          <DialogDescription>
+            {selectedVersion === 'all'
+              ? 'Export all responses from all versions'
+              : `Export responses from version ${selectedVersion}`}
+          </DialogDescription>
+        </DialogHeader>
+
+        <DialogContent className="space-y-4">
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2">
+            <p className="text-sm font-semibold text-slate-800">Export Details:</p>
+            <ul className="text-xs text-slate-600 space-y-1 list-disc list-inside">
+              <li>
+                Version:{' '}
+                <span className="font-mono font-semibold">
+                  {selectedVersion === 'all' ? 'All versions' : selectedVersion}
+                </span>
+              </li>
+              <li>
+                Responses:{' '}
+                <span className="font-mono font-semibold">{filteredResponses.length}</span>
+              </li>
+              <li>
+                Format: <span className="font-mono font-semibold">CSV</span>
+              </li>
+            </ul>
+          </div>
+        </DialogContent>
+
+        <DialogFooter>
+          <Button size="sm" variant="outline" onClick={() => setShowExportConfirm(false)}>
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            onClick={confirmExport}
+            disabled={isExporting}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white"
+          >
+            {isExporting ? 'Exporting...' : 'Confirm Export'}
+          </Button>
         </DialogFooter>
       </Dialog>
     </div>

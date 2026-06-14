@@ -72,6 +72,7 @@ const styles = `
     animation-iteration-count: infinite, infinite;
   }
 `
+
 import {
   Card,
   CardContent,
@@ -151,7 +152,7 @@ function Home() {
           <div className="md:col-span-7 space-y-4 sm:space-y-6 text-left">
             <div className="inline-flex items-center gap-0 px-4 sm:px-5 py-2 sm:py-2.5 rounded-full bg-white border-2 border-slate-200 shadow-sm hover:shadow-md transition-shadow duration-300 glitch-badge">
               <span className="text-xs sm:text-sm tracking-wide whitespace-nowrap overflow-hidden">
-                {"Welcome To OUR Survey BUILDER".split('').map((char, i) => (
+                {'Welcome To OUR Survey BUILDER'.split('').map((char, i) => (
                   <span key={i} className="bounce-char motion">
                     {char === ' ' ? '\u00A0' : char}
                   </span>
@@ -174,7 +175,9 @@ function Home() {
                   <Layout className="h-4 w-4 sm:h-5 sm:w-5" />
                 </div>
                 <div className="min-w-0">
-                  <h4 className="font-semibold text-xs sm:text-sm text-slate-800">Intuitive Builder</h4>
+                  <h4 className="font-semibold text-xs sm:text-sm text-slate-800">
+                    Intuitive Builder
+                  </h4>
                   <p className="text-[11px] sm:text-xs text-slate-500 leading-snug">
                     Drag-and-drop questions to reorder with a live styling panel.
                   </p>
@@ -185,7 +188,9 @@ function Home() {
                   <Palette className="h-4 w-4 sm:h-5 sm:w-5" />
                 </div>
                 <div className="min-w-0">
-                  <h4 className="font-semibold text-xs sm:text-sm text-slate-800">Custom Brand Identity</h4>
+                  <h4 className="font-semibold text-xs sm:text-sm text-slate-800">
+                    Custom Brand Identity
+                  </h4>
                   <p className="text-[11px] sm:text-xs text-slate-500 leading-snug">
                     Apply custom primary colors, descriptions, and brand logos.
                   </p>
@@ -273,7 +278,9 @@ function Home() {
 
       {/* Footer */}
       <footer className="py-4 sm:py-6 px-3 sm:px-6 border-t border-slate-200/50 bg-white/20 text-center text-xs text-slate-500">
-        <div className="text-[11px] sm:text-xs">FormFlow &copy; 2026. Made with ❤️ for the SDE Intern take-home assignment.</div>
+        <div className="text-[11px] sm:text-xs">
+          FormFlow &copy; 2026. Made with ❤️ for the SDE Intern take-home assignment.
+        </div>
       </footer>
     </div>
   )

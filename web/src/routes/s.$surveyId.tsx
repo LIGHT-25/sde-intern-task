@@ -14,6 +14,10 @@ export const Route = createFileRoute('/s/$surveyId')({
 function PublicSurvey() {
   const { surveyId } = Route.useParams()
 
+  // Extract version from URL search params
+  const searchParams = new URLSearchParams(window.location.search)
+  const versionParam = searchParams.get('v') || undefined
+
   // State
   const [survey, setSurvey] = useState<Survey | null>(null)
   const [questions, setQuestions] = useState<Question[]>([])
@@ -34,7 +38,7 @@ function PublicSurvey() {
       const surveyData = await apiService.getSurveyById(surveyId)
       setSurvey(surveyData)
 
-      const questionData = await apiService.getQuestions(surveyId)
+      const questionData = await apiService.getQuestions(surveyId, versionParam)
       setQuestions([...questionData].sort((a, b) => a.position - b.position))
     } catch (err) {
       console.error(err)
@@ -63,8 +67,9 @@ function PublicSurvey() {
 
     setIsSubmitting(true)
     try {
-      // 1. Create response
-      const responseId = await apiService.createResponse(survey.id)
+      // 1. Create response with the version from URL params (or use survey's current version)
+      const targetVersion = versionParam || survey.version || 'v1.0'
+      const responseId = await apiService.createResponseWithVersion(survey.id, targetVersion)
 
       // 2. Submit all answers
       const answersPayload = Object.entries(answers).map(([qId, val]) => {

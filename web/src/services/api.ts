@@ -18,8 +18,7 @@ const QUESTION_STORAGE_KEY = 'survey_builder_questions'
 const ANSWER_STORAGE_KEY = 'survey_builder_answers'
 
 // API base path (proxied by Vite)
-const API_BASE =
-  import.meta.env.VITE_API_URL || 'https://sde-intern-task-api.rupak-api.workers.dev/api'
+const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
 // --- Local Storage Helpers ---
 
@@ -147,6 +146,7 @@ export const apiService = {
       description: 'A brand new survey.',
       primary_color: '#4f46e5',
       logo_url: '',
+      version: 'v1.0',
     }
     saveLocalSurvey(data.id, newSurvey)
 
@@ -171,6 +171,28 @@ export const apiService = {
     saveLocalSurvey(id, updates)
   },
 
+  async bumpSurveyVersion(id: string): Promise<string> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const email = localStorage.getItem('survey_user_email')
+    if (email) {
+      headers.Authorization = `Bearer ${email}`
+    }
+
+    const res = await fetch(`${API_BASE}/surveys/${id}/bump-version`, {
+      method: 'POST',
+      headers,
+    })
+    if (!res.ok) throw new Error('Failed to bump survey version')
+    const data = await res.json()
+
+    // Clear local question override cache to force reload questions from D1 database
+    const allQuestions = getLocalQuestions()
+    delete allQuestions[id]
+    localStorage.setItem(QUESTION_STORAGE_KEY, JSON.stringify(allQuestions))
+
+    return data.version
+  },
+
   async deleteSurvey(id: string): Promise<void> {
     const headers: Record<string, string> = {}
     const email = localStorage.getItem('survey_user_email')
@@ -178,10 +200,14 @@ export const apiService = {
       headers.Authorization = `Bearer ${email}`
     }
 
-    await fetch(`${API_BASE}/surveys/${id}`, {
+    const res = await fetch(`${API_BASE}/surveys/${id}`, {
       method: 'DELETE',
       headers,
     })
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}))
+      throw new Error(errData.error || 'Failed to delete survey')
+    }
 
     // Clear local overrides
     const overrides = getLocalSurveys()
@@ -196,13 +222,15 @@ export const apiService = {
 
   // --- QUESTIONS ---
 
-  async getQuestions(surveyId: string): Promise<Question[]> {
-    const res = await fetch(`${API_BASE}/questions/${surveyId}`)
+  async getQuestions(surveyId: string, version?: string): Promise<Question[]> {
+    const query = version ? `?v=${encodeURIComponent(version)}` : ''
+    const res = await fetch(`${API_BASE}/questions/${surveyId}${query}`)
     if (!res.ok) throw new Error(`Failed to fetch questions for survey ${surveyId}`)
     const dbQuestions: Question[] = await res.json()
 
+    const cacheKey = version ? `${surveyId}_${version}` : surveyId
     const localAll = getLocalQuestions()
-    const localList = localAll[surveyId]
+    const localList = localAll[cacheKey]
 
     if (localList && localList.length > 0) {
       // Deduplicate local list by ID to clean up any duplicates
@@ -213,7 +241,7 @@ export const apiService = {
         return true
       })
       if (dedupedList.length !== localList.length) {
-        saveLocalQuestions(surveyId, dedupedList)
+        saveLocalQuestions(cacheKey, dedupedList)
       }
       return dedupedList
     }
@@ -226,7 +254,7 @@ export const apiService = {
         seen.add(q.id)
         return true
       })
-      saveLocalQuestions(surveyId, dedupedDb)
+      saveLocalQuestions(cacheKey, dedupedDb)
       return dedupedDb
     }
 
@@ -238,14 +266,6 @@ export const apiService = {
     type: QuestionType = 'text',
     title: string = 'New Question',
   ): Promise<Question> {
-    const res = await fetch(`${API_BASE}/questions/${surveyId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, title }),
-    })
-    if (!res.ok) throw new Error('Failed to create question')
-    const data = await res.json()
-
     // Set up default config based on type
     const config: QuestionConfig = {}
     if (type === 'multiple_choice') {
@@ -253,6 +273,15 @@ export const apiService = {
     } else if (type === 'rating') {
       config.maxRating = 5
     }
+    const config_json = JSON.stringify(config)
+
+    const res = await fetch(`${API_BASE}/questions/${surveyId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, title, config_json }),
+    })
+    if (!res.ok) throw new Error('Failed to create question')
+    const data = await res.json()
 
     // Get current local questions to compute position
     const currentQuestions = await this.getQuestions(surveyId)
@@ -265,7 +294,7 @@ export const apiService = {
       type,
       title,
       position: newPosition,
-      config_json: JSON.stringify(config),
+      config_json,
     }
 
     const updatedQuestions = currentQuestions.some((q) => q.id === data.id)
@@ -344,6 +373,17 @@ export const apiService = {
     const res = await fetch(`${API_BASE}/responses/${surveyId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+    })
+    if (!res.ok) throw new Error('Failed to create response')
+    const data = await res.json()
+    return data.responseId
+  },
+
+  async createResponseWithVersion(surveyId: string, version: string): Promise<string> {
+    const res = await fetch(`${API_BASE}/responses/${surveyId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version }),
     })
     if (!res.ok) throw new Error('Failed to create response')
     const data = await res.json()
